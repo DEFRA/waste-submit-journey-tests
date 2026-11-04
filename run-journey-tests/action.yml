@@ -1,10 +1,8 @@
 name: Run Journey Tests on GitHub
 
 inputs:
-  example-node-backend:
-    required: false
-    type: string
-  example-node-frontend:
+  waste-submit-reg-packaging-fe:
+    description: Image tag of waste-submit-reg-packaging-fe to test (default latest)
     required: false
     type: string
 
@@ -13,7 +11,7 @@ runs:
   steps:
     - uses: actions/checkout@v4
       with:
-        repository: DEFRA/cdp-node-journey-test-suite-template
+        repository: DEFRA/waste-submit-journey-tests
 
     - name: Docker Login
       uses: DEFRA/cdp-build-action/docker-login@main
@@ -23,18 +21,19 @@ runs:
         node-version-file: .nvmrc
         cache: npm
     - name: Setup the tests
-      run: npm i
+      run: |
+        npm ci
+        npx playwright install --with-deps chromium
       shell: bash
     - name: Start docker compose
       shell: bash
       run: |
-          CDP_EXAMPLE_NODE_FRONTEND=${{inputs.example-node-frontend}} \
-          CDP_EXAMPLE_NODE_BACKEND=${{inputs.example-node-backend}} \
-          docker compose up --wait-timeout 300 -d --quiet-pull
+          WASTE_SUBMIT_REG_PACKAGING_FE=${{inputs.waste-submit-reg-packaging-fe}} \
+          docker compose up --wait --wait-timeout 300 -d --quiet-pull
     - name: Run the tests
       shell: bash
       run: |
-        npm run test:github
+        npm test
         npm run report
     - name: debug
       if: always()

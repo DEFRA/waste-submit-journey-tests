@@ -8,7 +8,7 @@
 # Both mongo and localstack have init scripts included for setting up resources
 # on startup. These scripts are in docker/scripts.
 #
-# It also includes a selenium-chrome container for running the browser headless.
+# Playwright runs the browser on the host (or the GitHub runner), not in a container.
 #
 # The services being tested can either be started up here using the latest
 # builds from dockerhub.
@@ -18,14 +18,6 @@
 #
 ################################################################################
 services:
-
-################################################################################
-# Headless browser, used by the test suite to actually run the tests against the
-# containers.
-  selenium-chrome:
-    image: selenium/standalone-chrome:123.0
-    ports:
-      - 4444:4444
 
 ################################################################################
   mongodb:
@@ -70,25 +62,27 @@ services:
 # Add the services you want to test below.
 #
 ################################################################################
-#  cdp-example-node-frontend:
-#    image: defradigital/cdp-example-node-frontend:${CDP_EXAMPLE_NODE_FRONTEND:-latest}
-#    env_file:
-#      - ./docker/config/defaults.env
-#      - ./docker/config/example-frontend.env
-#    environment:
-#      - PORT=3000
-#    depends_on:
-#      cdp-example-node-backend:
-#        condition: service_started
-#      redis:
-#        condition: service_healthy
-#    ports:
-#      - 3000:3000
-#    healthcheck:
-#      test: ["CMD", "curl", "http://localhost:3000/health"]
-#      interval: 3s
-#      start_period: 2s
-#      retries: 3
+  waste-submit-reg-packaging-fe:
+    image: defradigital/waste-submit-reg-packaging-fe:${WASTE_SUBMIT_REG_PACKAGING_FE:-latest}
+    platform: linux/amd64
+    env_file:
+      - ./docker/config/defaults.env
+    environment:
+      - PORT=3000
+      - SESSION_CACHE_ENGINE=redis
+      - SESSION_COOKIE_SECURE=false
+      - REDIS_TLS=false
+      - ENABLE_SECURE_CONTEXT=false
+    depends_on:
+      redis:
+        condition: service_healthy
+    ports:
+      - 8019:3000
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 3s
+      start_period: 2s
+      retries: 10
 
 ################################################################################
 # cdp-example-node-backend:
