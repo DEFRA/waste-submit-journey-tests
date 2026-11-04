@@ -18,6 +18,7 @@ WORKDIR /app
 
 COPY . .
 RUN npm install
+RUN npx playwright install --with-deps chromium
 
 ENTRYPOINT [ "./entrypoint.sh" ]
 

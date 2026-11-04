@@ -1,12 +1,14 @@
-import { browser, $ } from '@wdio/globals'
-
 class Page {
+  constructor(page) {
+    this.page = page
+  }
+
   get pageHeading() {
-    return $('h1')
+    return this.page.locator('h1')
   }
 
   open(path) {
-    return browser.url(path)
+    return this.page.goto(path)
   }
 }
 

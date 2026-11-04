@@ -10,4 +10,4 @@ coverage
 .png
 allure-report/
 allure-results/
-FAILED
+test-results/
