@@ -20,11 +20,13 @@ export default defineConfig({
   timeout: 60_000,
   reporter: [['list'], ['allure-playwright', { resultsDir: 'allure-results' }]],
   use: {
-    ...devices['Desktop Chrome'],
     baseURL,
     proxy,
     ignoreHTTPSErrors: true,
     screenshot: 'only-on-failure',
     trace: 'retain-on-failure'
-  }
+  },
+  // The device settings live on the project, not the top-level `use`: the BrowserStack run
+  // (playwright.compatibility.config.js) keeps `use` but replaces the projects with its real browsers.
+  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }]
 })

@@ -10,7 +10,7 @@ test.describe('waste-submit-reg-packaging-fe is up', () => {
     expect(await response.json()).toEqual({ message: 'success' })
   })
 
-  test('the home page loads', async ({ page }) => {
+  test('the home page loads', { tag: '@compat' }, async ({ page }) => {
     const homePage = new HomePage(page)
 
     await homePage.open()

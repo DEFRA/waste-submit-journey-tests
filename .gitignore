@@ -11,3 +11,9 @@ coverage
 allure-report/
 allure-results/
 test-results/
+# browserstack-node-sdk run files
+browserstackSetupConfig.json
+playwright-browserstack-sdk.config.cjs
+playwright-browserstack-sdk.config.temp.json
+log/
+local.log

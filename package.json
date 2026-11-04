@@ -15,6 +15,7 @@
     "test": "npm run clean && playwright test",
     "test:local": "npm run clean && playwright test --headed",
     "test:local:debug": "npm run clean && playwright test --debug",
+    "test:compatibility": "npm run clean && browserstack-node-sdk playwright test --config=playwright.compatibility.config.js",
     "install:browsers": "playwright install --with-deps chromium",
     "format": "prettier --write 'test/**/*.js' '**/*.{js,md,json,config.js}'",
     "format:check": "prettier --check 'test/**/*.js' '**/*.{js,md,json,config.js}'",
@@ -31,7 +32,10 @@
   "dependencies": {
     "@playwright/test": "1.64.1",
     "allure-commandline": "2.43.0",
-    "allure-playwright": "3.14.0"
+    "allure-playwright": "3.14.0",
+    "browserstack-node-sdk": "1.76.0",
+    "global-agent": "3.0.0",
+    "undici": "8.12.3"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

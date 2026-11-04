@@ -1,7 +1,15 @@
 #!/bin/sh
 
 echo "run_id: $RUN_ID"
-npm test
+echo "profile: ${PROFILE:-default}"
+
+# PROFILE is set from the Portal's Run form. compatibility runs the @compat tests on BrowserStack's browsers; the
+# SDK has to wrap the playwright command itself, so it has its own script.
+if [ "$PROFILE" = "compatibility" ]; then
+  npm run test:compatibility
+else
+  npm test
+fi
 test_exit_code=$?
 
 npm run report:publish
