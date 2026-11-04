@@ -8,6 +8,7 @@ dev, test and perf-test.
   - [Against the local Docker setup](#against-the-local-docker-setup)
   - [Against a CDP environment](#against-a-cdp-environment)
   - [Options](#options)
+- [Cross-browser (BrowserStack)](#cross-browser-browserstack)
 - [On CDP](#on-cdp)
 - [On GitHub](#on-github)
 - [Licence](#licence)
@@ -89,6 +90,45 @@ docker run --rm -e BASE_URL=http://host.docker.internal:8019 waste-submit-journe
 ```
 
 It ends with "failed to publish test results" locally, because only CDP sets `RESULTS_OUTPUT_S3_PATH`.
+
+## Cross-browser (BrowserStack)
+
+The `compatibility` profile runs the tests tagged `@compat` in real browsers on BrowserStack Automate:
+
+| Platform   | Browser                               |
+| ---------- | ------------------------------------- |
+| Windows 11 | Chrome (latest)                       |
+| Windows 11 | Edge (latest)                         |
+| Windows 11 | Firefox (Playwright's build)          |
+| macOS      | Safari's engine (Playwright's WebKit) |
+
+The browsers are the `platforms` in `browserstack.yml`; to add one, add a platform there, not a Playwright project.
+To put a test in the cross-browser run, tag it: `test('…', { tag: '@compat' }, async ({ page }) => …)`. Browser tests
+only: the run doesn't go through CDP's proxy, so an API-only test like the health check stays out of it.
+
+You need the team's BrowserStack service account (see CDP's
+[BrowserStack guide](https://portal.cdp-int.defra.cloud/documentation/how-to/testing/browserstack-from-portal.md) for
+how to get one). Never use a personal BrowserStack login in automated tests, and never commit the credentials: this
+repository is public.
+
+**From the CDP Portal:**
+
+1. Once: on the test suite's page, Secrets tab, add `BROWSERSTACK_USER` and `BROWSERSTACK_KEY`.
+2. Run the suite with Profile `compatibility`. The entrypoint then runs `npm run test:compatibility` instead of
+   `npm test`.
+
+**From your machine,** against the local Docker setup or a CDP environment, as in
+[Running the tests](#running-the-tests):
+
+```bash
+export BROWSERSTACK_USER=… BROWSERSTACK_KEY=…   # from the service account; never commit them
+npm run test:compatibility                      # the local Docker setup
+ENVIRONMENT=dev npm run test:compatibility      # a CDP environment (VPN)
+```
+
+`browserstack.yml` turns on the BrowserStack Local tunnel, which lets BrowserStack's browsers reach hosts that aren't
+on the internet: your local frontend or the CDP environments. Watch the runs, with video, on the
+[BrowserStack Automate dashboard](https://automate.browserstack.com/); Playwright traces aren't recorded there.
 
 ## On CDP
 
