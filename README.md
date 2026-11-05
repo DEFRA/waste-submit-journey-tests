@@ -10,6 +10,11 @@ dev, test and perf-test.
   - [Options](#options)
 - [Cross-browser (BrowserStack)](#cross-browser-browserstack)
 - [Accessibility](#accessibility)
+- [Security (OWASP ZAP)](#security-owasp-zap)
+  - [When it runs](#when-it-runs)
+  - [Running it locally](#running-it-locally)
+  - [When it fails](#when-it-fails)
+  - [What it doesn't cover](#what-it-doesnt-cover)
 - [On CDP](#on-cdp)
 - [On GitHub](#on-github)
 - [Licence](#licence)
@@ -81,16 +86,20 @@ These work with either target:
 npm run test:local         # the browser visible
 npm run test:local:debug   # step through in the Playwright inspector
 npm run report             # build the Allure report from the last run (needs Java)
+npm run test:unit          # unit tests for the test helpers (no browser or frontend needed)
 ```
 
-To run the Docker image the way CDP does:
+To run the Docker image the way CDP does, security scan included, against the frontend in this repo's `compose.yml`:
 
 ```bash
 docker build --platform linux/amd64 -t waste-submit-journey-tests .
-docker run --rm -e BASE_URL=http://host.docker.internal:8019 waste-submit-journey-tests
+docker compose up -d --wait
+docker run --rm --network waste-submit-journey-tests_default \
+  -e BASE_URL=http://waste-submit-reg-packaging-fe.localhost:3000 waste-submit-journey-tests
 ```
 
-It ends with "failed to publish test results" locally, because only CDP sets `RESULTS_OUTPUT_S3_PATH`.
+It ends with "failed to publish test results" locally, because only CDP sets `RESULTS_OUTPUT_S3_PATH`. (Why the
+`.localhost` name: see [Running it locally](#running-it-locally).)
 
 ## Cross-browser (BrowserStack)
 
@@ -157,6 +166,86 @@ axe finds only some accessibility issues. The manual checks in the EPR
 Data team's `/a11y-scenarios` Claude Code skill ([epr-submit-data](https://github.com/DEFRA/epr-submit-data)) lists
 the manual checks a page needs for the WCAG 2.2 AA criteria axe can't check, and logs the results.
 
+## Security (OWASP ZAP)
+
+The [EPR Test Strategy](https://eaflood.atlassian.net/wiki/spaces/EDIA/pages/6626740224/EPR+Test+Strategy) names
+OWASP ZAP for dynamic security testing (DAST). The journey tests' traffic goes through [ZAP](https://www.zaproxy.org/)
+as a proxy, and ZAP's passive scan checks every request and response they make: security headers such as the Content
+Security Policy, cookie flags, anti-CSRF tokens on forms, information leaks. A passive scan only reads the traffic and
+sends nothing of its own, so it's safe against a shared environment.
+
+The run fails on any **High** or **Medium** alert for the frontend (ZAP has no Critical), the same policy as the other
+EPR journey-test suites. Low and Informational alerts are on the report but don't fail it. Alerts for other hosts, such
+as Google Analytics, aren't ours to fix, so they're left out.
+
+When `ZAP_URL` is set, `playwright.config.js` sends the browser's traffic through ZAP and adds two projects around the
+journey tests, both in `test/security/`:
+
+| Project      | Runs                          | Does                                                                                                                                                                                                     |
+| ------------ | ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `zap-setup`  | before the tests              | Fails fast if ZAP isn't there, starts a new ZAP session and names the frontend's anti-CSRF field (`crumb`) so ZAP recognises it                                                                          |
+| `zap-alerts` | after the tests, pass or fail | Waits for the passive scan to finish, then fails on any High or Medium alert not in `test/support/zap-accepted-alerts.js`. Also fails if no traffic went through ZAP, since then the scan proved nothing |
+
+`zap-alerts` attaches ZAP's HTML report and a summary of the alerts to the Allure report, and saves both in
+`zap-report/` (`zap-report.html`, `zap-alerts.json`).
+
+ZAP only sees the pages the tests reach. `test/specs/pages.spec.js` goes to every page and form the frontend has
+(about, cookies, saving cookie settings, the banner's accept and reject, page not found), so the security run covers
+them without the `@accessibility` tests. **When the frontend gets a new page or form, add a test for it there**, or
+ZAP never scans it.
+
+### When it runs
+
+| Where                                                                                                          | How                                                                                                                                                                                                                                       |
+| -------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Every pull request on `waste-submit-reg-packaging-fe`, before it merges                                        | The `run-journey-tests` action runs the whole suite, accessibility included, through ZAP (`ZAP_URL` set, `npm test`) against the PR's image, with ZAP from `compose.yml`. The ZAP report is the `zap-report` artifact on the workflow run |
+| The CDP Portal's default run (no Profile): run by hand, or automatically after each deployment of the frontend | `entrypoint.sh` starts the ZAP bundled in the image (pinned in the `Dockerfile`) and chains it to the platform proxy, then runs `npm test` through it. The ZAP report is attached to the Allure report                                    |
+| Your machine                                                                                                   | `npm run test:security` ([below](#running-it-locally))                                                                                                                                                                                    |
+
+The `accessibility` and `compatibility` profiles don't go through ZAP.
+
+### Running it locally
+
+ZAP runs in Docker, from this repo's `compose.yml`, along with the frontend and what it needs. Stop epr-local-environment's
+frontend first if it's running: both use port 8019.
+
+```bash
+docker compose up -d --wait   # the frontend, ZAP, Redis, MongoDB, LocalStack
+npm run test:security         # the journey tests (not @accessibility) through ZAP, then the alert check
+docker compose down           # when you're done
+```
+
+`npm run test:security` leaves out the `@accessibility` tests. It sets `ZAP_URL=http://localhost:8080` and, unless you
+set `BASE_URL`, goes to
+`http://waste-submit-reg-packaging-fe.localhost:3000`. That name is two workarounds in one:
+
+- The browser hands every URL to ZAP. To ZAP, in its own container, `localhost:8019` would be itself, so it needs
+  the frontend's name on the Docker network (an alias in `compose.yml`).
+- The frontend's image runs in production mode, so its CSRF and cookie-policy cookies are `Secure`. Over plain HTTP,
+  Chromium only keeps `Secure` cookies for `localhost` and `*.localhost`; on any other name the cookie forms fail.
+
+Open `zap-report/zap-report.html` for the detail of each alert. Leaving ZAP running is fine: each run starts a new
+session.
+
+### When it fails
+
+The failure lists each alert: risk, the ZAP rule's name and id, and the URLs. The ZAP report says why ZAP raised it,
+the evidence and the fix.
+
+1. **A real issue:** fix it in the frontend, or raise a ticket for it.
+2. **A false positive, or a risk the team accepts:** add it to `test/support/zap-accepted-alerts.js` with the rule's
+   id, the reason, and the ticket where it was decided. Limit it to the URLs it applies to (`urls`) where you can, so
+   the same problem on a new page still fails. Prefer teaching ZAP over accepting an alert where ZAP allows it, as
+   `zap-setup` does for the `crumb` field.
+
+### What it doesn't cover
+
+- **Active scanning** (ZAP sending attack payloads, such as injection, to the frontend) isn't run: it would change
+  data on shared environments and needs agreeing with the environment's owners first.
+- **Pages the journey tests don't reach,** and signed-in pages until the journeys sign in.
+- **Static analysis (SAST) and dependency scanning,** the Test Strategy's other security checks, belong in the
+  frontend's own pipeline, not here.
+
 ## On CDP
 
 - Every merge to `main` builds and publishes a new image (`.github/workflows/publish.yml`); the Portal always runs
@@ -166,15 +255,19 @@ the manual checks a page needs for the WCAG 2.2 AA criteria axe can't check, and
   through the platform proxy (`HTTP_PROXY`).
 - After a deployment: the frontend's Portal page, Automations, Test Runs, runs this suite whenever the frontend is
   deployed to the environments chosen there.
+- The default run (no Profile) goes through OWASP ZAP and fails on any High or Medium security alert; see
+  [Security (OWASP ZAP)](#security-owasp-zap). If ZAP doesn't start, the tests still run but the run fails.
 - Pass or fail is the container's exit code (`entrypoint.sh`); the Allure report is uploaded to the Portal by
   `bin/publish-tests.sh`.
 
 ## On GitHub
 
 GitHub can't reach CDP environments, so `.github/workflows/journey-tests.yml` runs the tests against the frontend's
-Docker Hub image started from `compose.yml`. Locally: `docker compose up -d --wait` then `npm test`. A service repo
-can run them on its pull requests with `DEFRA/waste-submit-journey-tests/run-journey-tests@main`, passing the image
-tag it built as `waste-submit-reg-packaging-fe`.
+Docker Hub image started from `compose.yml`, the whole suite through OWASP ZAP. Locally: `docker compose up -d --wait`
+then `ZAP_URL=http://localhost:8080 npm test`. A service repo can run them on its pull requests with
+`DEFRA/waste-submit-journey-tests/run-journey-tests@main`, passing the image tag it built as
+`waste-submit-reg-packaging-fe`; `waste-submit-reg-packaging-fe` does, so its pull request check fails on a High or
+Medium security alert. The action uploads the Allure report, the ZAP report and the Docker Compose logs as artifacts.
 
 ## Licence
 

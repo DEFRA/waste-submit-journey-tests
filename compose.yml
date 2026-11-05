@@ -8,7 +8,8 @@
 # Both mongo and localstack have init scripts included for setting up resources
 # on startup. These scripts are in docker/scripts.
 #
-# Playwright runs the browser on the host (or the GitHub runner), not in a container.
+# Playwright runs the browser on the host (or the GitHub runner), not in a container. Its traffic can go through
+# the zap service, for the security scan.
 #
 # The services being tested can either be started up here using the latest
 # builds from dockerhub.
@@ -76,6 +77,12 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+    # The name the security scan uses (see zap below). Chromium treats *.localhost as a secure context, so it keeps
+    # the app's Secure cookies (the CSRF crumb, the cookie policy) over plain HTTP, as it does for localhost.
+    networks:
+      default:
+        aliases:
+          - waste-submit-reg-packaging-fe.localhost
     ports:
       - 8019:3000
     healthcheck:
@@ -83,6 +90,25 @@ services:
       interval: 3s
       start_period: 2s
       retries: 10
+
+################################################################################
+# OWASP ZAP, the proxy the tests' traffic goes through so it can be scanned (npm run test:security). The browser
+# hands each URL to ZAP, which resolves http://waste-submit-reg-packaging-fe.localhost:3000 on this network; to ZAP,
+# localhost:8019 would be its own container. The API has no key, so its port is only published on 127.0.0.1.
+  zap:
+    image: ghcr.io/zaproxy/zaproxy:2.17.0
+    command: >-
+      zap.sh -daemon -silent -host 0.0.0.0 -port 8080
+      -config api.disablekey=true
+      -config api.addrs.addr.name=.*
+      -config api.addrs.addr.regex=true
+    ports:
+      - 127.0.0.1:8080:8080
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/JSON/core/view/version/"]
+      interval: 5s
+      start_period: 10s
+      retries: 24
 
 ################################################################################
 # cdp-example-node-backend:

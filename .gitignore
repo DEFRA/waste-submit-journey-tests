@@ -17,3 +17,4 @@ playwright-browserstack-sdk.config.cjs
 playwright-browserstack-sdk.config.temp.json
 log/
 local.log
+zap-report/

@@ -12,11 +12,13 @@
     "#support/*": "./test/support/*"
   },
   "scripts": {
-    "clean": "rm -rf allure-results allure-report test-results",
+    "clean": "rm -rf allure-results allure-report test-results zap-report",
     "test": "npm run clean && playwright test",
     "test:local": "npm run clean && playwright test --headed",
     "test:local:debug": "npm run clean && playwright test --debug",
     "test:accessibility": "npm run clean && playwright test --grep @accessibility",
+    "test:security": "npm run clean && ZAP_URL=${ZAP_URL:-http://localhost:8080} playwright test --grep-invert @accessibility",
+    "test:unit": "node --test 'test/unit/**/*.test.js'",
     "test:compatibility": "npm run clean && browserstack-node-sdk playwright test --config=playwright.compatibility.config.js",
     "install:browsers": "playwright install --with-deps chromium",
     "format": "prettier --write 'test/**/*.js' '**/*.{js,md,json,config.js}'",
