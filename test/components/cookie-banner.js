@@ -14,12 +14,26 @@ class CookieBanner {
     })
   }
 
+  get rejectButton() {
+    return this.banner.getByRole('button', {
+      name: 'Reject analytics cookies'
+    })
+  }
+
   get acceptedMessage() {
     return this.banner.getByText("You've accepted analytics cookies.")
   }
 
+  get rejectedMessage() {
+    return this.banner.getByText("You've rejected analytics cookies.")
+  }
+
   accept() {
     return this.acceptButton.click()
+  }
+
+  reject() {
+    return this.rejectButton.click()
   }
 }
 
