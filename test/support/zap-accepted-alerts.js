@@ -10,6 +10,16 @@
 //
 // A Low or Informational alert never fails the run, so it doesn't need an entry here. Remove an entry once its ticket
 // is done, so the scan checks that again.
-const acceptedAlerts = []
+const acceptedAlerts = [
+  {
+    // Content Security Policy (CSP) Header Not Set
+    pluginId: 10038,
+    urls: /\/this-page-does-not-exist$/,
+    reason:
+      "The frontend's error pages are served without the CSP the other pages have. Clickjacking is still covered " +
+      'by X-Frame-Options: DENY and the pages show little, so accepted until the frontend fixes it.',
+    ticket: 'SUB-436'
+  }
+]
 
 export { acceptedAlerts }
