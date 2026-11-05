@@ -8,13 +8,15 @@
   },
   "imports": {
     "#page-objects/*": "./test/page-objects/*",
-    "#components/*": "./test/components/*"
+    "#components/*": "./test/components/*",
+    "#support/*": "./test/support/*"
   },
   "scripts": {
     "clean": "rm -rf allure-results allure-report test-results",
     "test": "npm run clean && playwright test",
     "test:local": "npm run clean && playwright test --headed",
     "test:local:debug": "npm run clean && playwright test --debug",
+    "test:accessibility": "npm run clean && playwright test --grep @accessibility",
     "test:compatibility": "npm run clean && browserstack-node-sdk playwright test --config=playwright.compatibility.config.js",
     "install:browsers": "playwright install --with-deps chromium",
     "format": "prettier --write 'test/**/*.js' '**/*.{js,md,json,config.js}'",
@@ -30,6 +32,7 @@
   "author": "Defra DDTS",
   "license": "OGL-UK-3.0",
   "dependencies": {
+    "@axe-core/playwright": "4.14.0",
     "@playwright/test": "1.64.1",
     "allure-commandline": "2.43.0",
     "allure-playwright": "3.14.0",
