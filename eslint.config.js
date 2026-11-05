@@ -7,7 +7,13 @@ import playwright from 'eslint-plugin-playwright'
 
 export default defineConfig([
   {
-    ignores: ['allure-results/', 'allure-report/', 'test-results/', 'docker/']
+    ignores: [
+      'allure-results/',
+      'allure-report/',
+      'test-results/',
+      'zap-report/',
+      'docker/'
+    ]
   },
 
   js.configs.recommended,
