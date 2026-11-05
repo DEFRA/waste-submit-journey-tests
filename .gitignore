@@ -10,4 +10,10 @@ coverage
 .png
 allure-report/
 allure-results/
-FAILED
+test-results/
+# browserstack-node-sdk run files
+browserstackSetupConfig.json
+playwright-browserstack-sdk.config.cjs
+playwright-browserstack-sdk.config.temp.json
+log/
+local.log

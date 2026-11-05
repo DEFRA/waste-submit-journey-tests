@@ -1,0 +1,42 @@
+# Read by browserstack-node-sdk (npm run test:compatibility). The credentials come from the environment:
+# on CDP, the test suite's Secrets tab in the Portal; never commit them.
+userName: ${BROWSERSTACK_USER}
+accessKey: ${BROWSERSTACK_KEY}
+
+projectName: waste-submit-journey-tests
+buildName: waste-submit-journey-tests
+buildIdentifier: '#${DATE_TIME}'
+
+# One project per platform. To add a browser, add a platform here, not a Playwright project.
+platforms:
+  - os: Windows
+    osVersion: '11'
+    browserName: chrome
+    browserVersion: latest
+    playwrightConfigOptions:
+      name: windows11-chrome
+  - os: Windows
+    osVersion: '11'
+    browserName: edge
+    browserVersion: latest
+    playwrightConfigOptions:
+      name: windows11-edge
+  - os: Windows
+    osVersion: '11'
+    browserName: playwright-firefox
+    playwrightConfigOptions:
+      name: windows11-firefox
+  - os: OS X
+    osVersion: Sequoia
+    browserName: playwright-webkit
+    playwrightConfigOptions:
+      name: macos-safari
+
+# The Local tunnel lets BrowserStack's browsers reach hosts that aren't on the internet: the CDP environments, or
+# the frontend in epr-local-environment.
+browserstackLocal: true
+browserStackLocalOptions:
+  forceLocal: false
+  onlyAutomate: true
+
+acceptSslCerts: true

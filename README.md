@@ -1,96 +1,153 @@
-waste-submit-journey-tests
+# waste-submit-journey-tests
 
-The template to create a service that runs WDIO tests against an environment.
+Playwright journey tests for Submit Data's CDP frontend, `waste-submit-reg-packaging-fe`, run by the CDP Portal against
+dev, test and perf-test.
 
-- [Local](#local)
-  - [Requirements](#requirements)
-    - [Node.js](#nodejs)
-  - [Setup](#setup)
-  - [Running local tests](#running-local-tests)
-  - [Debugging local tests](#debugging-local-tests)
-- [Production](#production)
-  - [Debugging tests](#debugging-tests)
+- [Setup](#setup)
+- [Running the tests](#running-the-tests)
+  - [Against the local Docker setup](#against-the-local-docker-setup)
+  - [Against a CDP environment](#against-a-cdp-environment)
+  - [Options](#options)
+- [Cross-browser (BrowserStack)](#cross-browser-browserstack)
+- [On CDP](#on-cdp)
+- [On GitHub](#on-github)
 - [Licence](#licence)
-  - [About the licence](#about-the-licence)
 
-## Local Development
+## Setup
 
-### Requirements
-
-#### Node.js
-
-Please install [Node.js](http://nodejs.org/) `>= v24` and [npm](https://nodejs.org/) `>= v11`. You will find it
-easier to use the Node Version Manager [nvm](https://github.com/creationix/nvm)
-
-To use the correct version of Node.js for this application, via nvm:
-
-```bash
-nvm use
-```
-
-### Setup
-
-Install application dependencies:
+Node.js `>= v24` (`nvm use` picks up `.nvmrc`). Then:
 
 ```bash
 npm install
+npm run install:browsers   # Playwright's Chromium
 ```
 
-### Running local tests
+## Running the tests
 
-Start application you are testing on the url specified in `baseUrl` [wdio.local.conf.js](wdio.local.conf.js)
+Where the tests go is set by environment variables, checked in this order:
+
+| Set                        | Tests run against                                                         |
+| -------------------------- | ------------------------------------------------------------------------- |
+| `BASE_URL`                 | that URL                                                                  |
+| `ENVIRONMENT` (e.g. `dev`) | `https://waste-submit-reg-packaging-fe.<ENVIRONMENT>.cdp-int.defra.cloud` |
+| neither                    | `http://localhost:8019`, the local Docker setup                           |
+
+### Against the local Docker setup
+
+The frontend runs in [epr-local-environment](https://github.com/DEFRA/epr-local-environment), `submit-data` profile,
+on http://localhost:8019.
+
+1. Start it, from your epr-local-environment clone:
+
+   ```bash
+   docker compose --profile submit-data up -d --wait
+   ```
+
+   It pulls `defradigital/waste-submit-reg-packaging-fe:latest`; set `WASTE_SUBMIT_REG_PACKAGING_FE=<version>` to run
+   another version.
+
+2. Run the tests, from this repo:
+
+   ```bash
+   npm test
+   ```
+
+3. Stop it when you're done, from epr-local-environment (this leaves any other profiles you have running alone):
+
+   ```bash
+   docker compose stop waste-submit-reg-packaging-fe
+   ```
+
+To test the frontend's own `npm run dev` instead (port 3000): `BASE_URL=http://localhost:3000 npm test`.
+
+### Against a CDP environment
+
+Connect to the DEFRA VPN, then name the environment:
 
 ```bash
-npm run test:local
+ENVIRONMENT=dev npm test
+ENVIRONMENT=test npm test
 ```
 
-### Debugging local tests
+This runs from your machine against what's deployed there (check with the CDP Portal). perf-test didn't answer from
+the VPN when this was set up; run it from the Portal instead (see [On CDP](#on-cdp)).
+
+### Options
+
+These work with either target:
 
 ```bash
-npm run test:local:debug
+npm run test:local         # the browser visible
+npm run test:local:debug   # step through in the Playwright inspector
+npm run report             # build the Allure report from the last run (needs Java)
 ```
 
-## Production
+To run the Docker image the way CDP does:
 
-### Running the tests
+```bash
+docker build --platform linux/amd64 -t waste-submit-journey-tests .
+docker run --rm -e BASE_URL=http://host.docker.internal:8019 waste-submit-journey-tests
+```
 
-Tests are run from the CDP-Portal under the Test Suites section. Before any changes can be run, a new docker image must be built, this will happen automatically when a pull request is merged into the `main` branch.
-You can check the progress of the build under the actions section of this repository. Builds typically take around 1-2 minutes.
+It ends with "failed to publish test results" locally, because only CDP sets `RESULTS_OUTPUT_S3_PATH`.
 
-The results of the test run are made available in the portal.
+## Cross-browser (BrowserStack)
 
-## Requirements of CDP Environment Tests
+The `compatibility` profile runs the tests tagged `@compat` in real browsers on BrowserStack Automate:
 
-1. Your service builds as a docker container using the `.github/workflows/publish.yml`
-   The workflow tags the docker images allowing the CDP Portal to identify how the container should be run on the platform.
-   It also ensures its published to the correct docker repository.
+| Platform   | Browser                               |
+| ---------- | ------------------------------------- |
+| Windows 11 | Chrome (latest)                       |
+| Windows 11 | Edge (latest)                         |
+| Windows 11 | Firefox (Playwright's build)          |
+| macOS      | Safari's engine (Playwright's WebKit) |
 
-2. The Dockerfile's entrypoint script should return exit code of 0 if the test suite passes or 1/>0 if it fails
+The browsers are the `platforms` in `browserstack.yml`; to add one, add a platform there, not a Playwright project.
+To put a test in the cross-browser run, tag it: `test('…', { tag: '@compat' }, async ({ page }) => …)`. Browser tests
+only: the run doesn't go through CDP's proxy, so an API-only test like the health check stays out of it.
 
-3. Test reports should be published to S3 using the script in `./bin/publish-tests.sh`
+You need the team's BrowserStack service account (see CDP's
+[BrowserStack guide](https://portal.cdp-int.defra.cloud/documentation/how-to/testing/browserstack-from-portal.md) for
+how to get one). Never use a personal BrowserStack login in automated tests, and never commit the credentials: this
+repository is public.
 
-## Running on GitHub
+**From the CDP Portal:**
 
-Alternatively you can run the test suite as a GitHub workflow.
-Test runs on GitHub are not able to connect to the CDP Test environments. Instead, they run the tests agains a version of the services running in docker.
-A docker compose `compose.yml` is included as a starting point, which includes the databases (mongodb, redis) and infrastructure (localstack) pre-setup.
+1. Once: on the test suite's page, Secrets tab, add `BROWSERSTACK_USER` and `BROWSERSTACK_KEY`.
+2. Run the suite with Profile `compatibility`. The entrypoint then runs `npm run test:compatibility` instead of
+   `npm test`.
 
-Steps:
+**From your machine,** against the local Docker setup or a CDP environment, as in
+[Running the tests](#running-the-tests):
 
-1. Edit the compose.yml to include your services.
-2. Modify the scripts in docker/scripts to pre-populate the database, if required and create any localstack resources.
-3. Test the setup locally with `docker compose up` and `npm run test:github`
-4. Set up the workflow trigger in `.github/workflows/journey-tests`.
+```bash
+export BROWSERSTACK_USER=… BROWSERSTACK_KEY=…   # from the service account; never commit them
+npm run test:compatibility                      # the local Docker setup
+ENVIRONMENT=dev npm run test:compatibility      # a CDP environment (VPN)
+```
 
-By default, the provided workflow will run when triggered manually from GitHub or when triggered by another workflow.
+`browserstack.yml` turns on the BrowserStack Local tunnel, which lets BrowserStack's browsers reach hosts that aren't
+on the internet: your local frontend or the CDP environments. Watch the runs, with video, on the
+[BrowserStack Automate dashboard](https://automate.browserstack.com/); Playwright traces aren't recorded there.
 
-If you want to use the repository exclusively for running docker composed based test suites consider displaying the publish.yml workflow.
+## On CDP
 
-## BrowserStack
+- Every merge to `main` builds and publishes a new image (`.github/workflows/publish.yml`); the Portal always runs
+  the latest build.
+- Run it from the Portal: Test Suites, `waste-submit-journey-tests`, choose the environment and press Run. The Portal
+  sets `ENVIRONMENT`, so the tests go to `https://waste-submit-reg-packaging-fe.<environment>.cdp-int.defra.cloud`,
+  through the platform proxy (`HTTP_PROXY`).
+- After a deployment: the frontend's Portal page, Automations, Test Runs, runs this suite whenever the frontend is
+  deployed to the environments chosen there.
+- Pass or fail is the container's exit code (`entrypoint.sh`); the Allure report is uploaded to the Portal by
+  `bin/publish-tests.sh`.
 
-Two wdio configuration files are provided to help run the tests using BrowserStack in both a GitHub workflow (`wdio.github.browserstack.conf.js`) and from the CDP Portal (`wdio.browserstack.conf.js`).
-They can be run from npm using the `npm run test:browserstack` (for running via portal) and `npm run test:github:browserstack` (from GitHib runner).
-See the CDP Documentation for more details.
+## On GitHub
+
+GitHub can't reach CDP environments, so `.github/workflows/journey-tests.yml` runs the tests against the frontend's
+Docker Hub image started from `compose.yml`. Locally: `docker compose up -d --wait` then `npm test`. A service repo
+can run them on its pull requests with `DEFRA/waste-submit-journey-tests/run-journey-tests@main`, passing the image
+tag it built as `waste-submit-reg-packaging-fe`.
 
 ## Licence
 

@@ -1,4 +1,4 @@
-import { Page } from '#page-objects/page'
+import { Page } from '#page-objects/page.js'
 
 class HomePage extends Page {
   open() {
@@ -6,4 +6,4 @@ class HomePage extends Page {
   }
 }
 
-export default new HomePage()
+export { HomePage }
