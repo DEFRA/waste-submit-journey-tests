@@ -4,9 +4,12 @@ echo "run_id: $RUN_ID"
 echo "profile: ${PROFILE:-default}"
 
 # PROFILE is set from the Portal's Run form. compatibility runs the @compat tests on BrowserStack's browsers; the
-# SDK has to wrap the playwright command itself, so it has its own script.
+# SDK has to wrap the playwright command itself, so it has its own script. accessibility runs only the @accessibility
+# tests (the default run includes them too).
 if [ "$PROFILE" = "compatibility" ]; then
   npm run test:compatibility
+elif [ "$PROFILE" = "accessibility" ]; then
+  npm run test:accessibility
 else
   npm test
 fi

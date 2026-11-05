@@ -16,6 +16,7 @@
     "test": "npm run clean && playwright test",
     "test:local": "npm run clean && playwright test --headed",
     "test:local:debug": "npm run clean && playwright test --debug",
+    "test:accessibility": "npm run clean && playwright test --grep @accessibility",
     "test:compatibility": "npm run clean && browserstack-node-sdk playwright test --config=playwright.compatibility.config.js",
     "install:browsers": "playwright install --with-deps chromium",
     "format": "prettier --write 'test/**/*.js' '**/*.{js,md,json,config.js}'",
