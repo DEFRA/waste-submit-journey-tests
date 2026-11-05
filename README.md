@@ -9,6 +9,7 @@ dev, test and perf-test.
   - [Against a CDP environment](#against-a-cdp-environment)
   - [Options](#options)
 - [Cross-browser (BrowserStack)](#cross-browser-browserstack)
+- [Accessibility](#accessibility)
 - [On CDP](#on-cdp)
 - [On GitHub](#on-github)
 - [Licence](#licence)
@@ -129,6 +130,32 @@ ENVIRONMENT=dev npm run test:compatibility      # a CDP environment (VPN)
 `browserstack.yml` turns on the BrowserStack Local tunnel, which lets BrowserStack's browsers reach hosts that aren't
 on the internet: your local frontend or the CDP environments. Watch the runs, with video, on the
 [BrowserStack Automate dashboard](https://automate.browserstack.com/); Playwright traces aren't recorded there.
+
+## Accessibility
+
+`test/specs/accessibility.spec.js` opens each page, and each state of it a user can reach (the cookie banner before
+and after accepting, the cookies page after saving, page not found), and scans it with
+[axe-core](https://github.com/dequelabs/axe-core) through `@axe-core/playwright`. The scan checks
+**WCAG 2.2 AA**, the standard the
+[EPR Test Strategy](https://eaflood.atlassian.net/wiki/spaces/EDIA/pages/6626740224/EPR+Test+Strategy) sets as a
+deployment-blocking check, so any violation fails the test. Each test attaches axe's results to the Allure report,
+including the checks axe couldn't decide (`incomplete`), which need a person to look at.
+
+The tests are tagged `@accessibility` and run with the rest of `npm test`, so they also run on every frontend pull
+request (see [On GitHub](#on-github)). To run them alone, locally or with Profile `accessibility` in the Portal:
+
+```bash
+npm run test:accessibility
+```
+
+To cover a new page, add a test there that reaches it through the page objects, checks it's on the right page, then
+calls `expectNoAccessibilityViolations(page)` from `#support/accessibility.js`.
+
+axe finds only some accessibility issues. The manual checks in the EPR
+[Accessibility testing guidance](https://eaflood.atlassian.net/wiki/spaces/EDIA/pages/6270353488/Accessibility+testing)
+(keyboard navigation, 200-300% zoom, dark and high contrast modes, read aloud) still apply to each change. The Submit
+Data team's `/a11y-scenarios` Claude Code skill ([epr-submit-data](https://github.com/DEFRA/epr-submit-data)) lists
+the manual checks a page needs for the WCAG 2.2 AA criteria axe can't check, and logs the results.
 
 ## On CDP
 
