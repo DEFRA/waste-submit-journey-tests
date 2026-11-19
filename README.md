@@ -34,7 +34,7 @@ Where the tests go is set by environment variables, checked in this order:
 
 | Set                        | Tests run against                                                         |
 | -------------------------- | ------------------------------------------------------------------------- |
-| `BASE_URL`                 | that URL                                                                  |
+| `FRONTEND_URL`             | that URL                                                                  |
 | `ENVIRONMENT` (e.g. `dev`) | `https://waste-submit-reg-packaging-fe.<ENVIRONMENT>.cdp-int.defra.cloud` |
 | neither                    | `http://localhost:8019`, the local Docker setup                           |
 
@@ -64,7 +64,7 @@ on http://localhost:8019.
    docker compose stop waste-submit-reg-packaging-fe
    ```
 
-To test the frontend's own `npm run dev` instead (port 3000): `BASE_URL=http://localhost:3000 npm test`.
+To test the frontend's own `npm run dev` instead (port 3000): `FRONTEND_URL=http://localhost:3000 npm test`.
 
 ### Against a CDP environment
 
@@ -95,7 +95,7 @@ To run the Docker image the way CDP does, security scan included, against the fr
 docker build --platform linux/amd64 -t waste-submit-journey-tests .
 docker compose up -d --wait
 docker run --rm --network waste-submit-journey-tests_default \
-  -e BASE_URL=http://waste-submit-reg-packaging-fe.localhost:3000 waste-submit-journey-tests
+  -e FRONTEND_URL=http://waste-submit-reg-packaging-fe.localhost:3000 waste-submit-journey-tests
 ```
 
 It ends with "failed to publish test results" locally, because only CDP sets `RESULTS_OUTPUT_S3_PATH`. (Why the
@@ -216,7 +216,7 @@ docker compose down           # when you're done
 ```
 
 `npm run test:security` leaves out the `@accessibility` tests. It sets `ZAP_URL=http://localhost:8080` and, unless you
-set `BASE_URL`, goes to
+set `FRONTEND_URL`, goes to
 `http://waste-submit-reg-packaging-fe.localhost:3000`. That name is two workarounds in one:
 
 - The browser hands every URL to ZAP. To ZAP, in its own container, `localhost:8019` would be itself, so it needs

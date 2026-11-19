@@ -5,10 +5,10 @@ import { defineConfig, devices } from '@playwright/test'
 const zapUrl = process.env.ZAP_URL
 
 // On CDP the Portal sets ENVIRONMENT (dev, test, perf-test). Locally the frontend runs in epr-local-environment
-// (submit-data profile) on port 8019; BASE_URL overrides either. Scanning locally, ZAP and the frontend both run in
+// (submit-data profile) on port 8019; FRONTEND_URL overrides either. Scanning locally, ZAP and the frontend both run in
 // this repo's compose.yml, where the frontend is waste-submit-reg-packaging-fe.localhost:3000 (see the comments there).
 const baseURL =
-  process.env.BASE_URL ||
+  process.env.FRONTEND_URL ||
   (process.env.ENVIRONMENT
     ? `https://waste-submit-reg-packaging-fe.${process.env.ENVIRONMENT}.cdp-int.defra.cloud`
     : zapUrl
@@ -19,7 +19,7 @@ const baseURL =
 // would fail on every page instead of scanning the frontend.
 if (zapUrl && /^(localhost|127\.|\[::1\])/.test(new URL(baseURL).host)) {
   throw new Error(
-    `ZAP can't reach ${baseURL}: to ZAP, localhost is its own container. Leave BASE_URL unset to scan the frontend in compose.yml.`
+    `ZAP can't reach ${baseURL}: to ZAP, localhost is its own container. Leave FRONTEND_URL unset to scan the frontend in compose.yml.`
   )
 }
 
