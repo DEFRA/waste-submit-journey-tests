@@ -74,6 +74,16 @@ services:
       - SESSION_COOKIE_SECURE=false
       - REDIS_TLS=false
       - ENABLE_SECURE_CONTEXT=false
+      # Sign-in with the AZDCUSPOC2 B2C test tenant, as waste-obligations-journey-tests does. The client ID is this
+      # frontend's app registration there, which must allow http://waste-submit-reg-packaging-fe.localhost:3000/signin-oidc
+      # as a redirect URI. The secret is a GitHub secret, never committed: this repository is public.
+      - AZURE_AD_B2C_INSTANCE=https://AZDCUSPOC2.b2clogin.com
+      - AZURE_AD_B2C_DOMAIN=AZDCUSPOC2.onmicrosoft.com
+      - AZURE_AD_B2C_USER_FLOW=B2C_1A_EPR_SignUpSignIn
+      - AZURE_AD_B2C_CLIENT_ID=9c23c89a-4410-45df-a77c-aa35634b5a96
+      - AZURE_AD_B2C_CLIENT_SECRET=${WASTE_SUBMIT_REG_PACKAGING_FE_B2C_CLIENT_SECRET:?Set WASTE_SUBMIT_REG_PACKAGING_FE_B2C_CLIENT_SECRET to the frontend's B2C client secret (see the README, Signing in)}
+      # Plain HTTP here, so the redirect URI sent to B2C is http and the OAuth state cookie isn't Secure.
+      - AUTH_COOKIE_SECURE=false
     depends_on:
       redis:
         condition: service_healthy

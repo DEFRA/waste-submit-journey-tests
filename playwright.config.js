@@ -1,5 +1,7 @@
 import { defineConfig, devices } from '@playwright/test'
 
+import { SIGNED_IN_STATE } from './test/support/sign-in.js'
+
 // When ZAP_URL is set, every request the tests make goes through OWASP ZAP, which scans it for security issues
 // (test/support/zap.js). entrypoint.sh sets it on CDP and the run-journey-tests action on GitHub.
 const zapUrl = process.env.ZAP_URL
@@ -63,12 +65,22 @@ export default defineConfig({
   },
   // The device settings live on the project, not the top-level `use`: the BrowserStack run
   // (playwright.compatibility.config.js) keeps `use` but replaces the projects with its real browsers.
+  //
+  // sign-in signs the test user in through Azure AD B2C once and saves the browser's cookies; the journey tests start
+  // from them (test/auth/sign-in.setup.js). With ZAP, sign-in runs after zap-setup, so the new ZAP session sees it.
   projects: [
     ...zapProjects,
     {
-      name: 'chromium',
+      name: 'sign-in',
+      testDir: './test/auth',
+      testMatch: 'sign-in.setup.js',
       use: { ...devices['Desktop Chrome'] },
       dependencies: zapUrl ? ['zap-setup'] : []
+    },
+    {
+      name: 'chromium',
+      use: { ...devices['Desktop Chrome'], storageState: SIGNED_IN_STATE },
+      dependencies: ['sign-in']
     }
   ]
 })
