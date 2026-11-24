@@ -5,6 +5,20 @@ inputs:
     description: Image tag of waste-submit-reg-packaging-fe to test (default latest)
     required: false
     type: string
+  journey-tests-ref:
+    description: Branch or SHA of these tests to run (default main). A caller passes its own branch's name when this repo has a matching branch, so a frontend change and its test changes run together before either merges.
+    required: false
+    type: string
+  # A composite action can't read the caller's secrets, so the caller passes them in. See the README, Signing in.
+  b2c-client-secret:
+    description: The frontend's Azure AD B2C client secret (the caller's WASTE_SUBMIT_REG_PACKAGING_FE_B2C_CLIENT_SECRET)
+    required: true
+  user-email:
+    description: The B2C test user's email address (the caller's EPR_USER_EMAIL)
+    required: true
+  user-password:
+    description: The B2C test user's password (the caller's EPR_USER_PASSWORD)
+    required: true
 
 runs:
   using: "composite"
@@ -12,6 +26,7 @@ runs:
     - uses: actions/checkout@v4
       with:
         repository: DEFRA/waste-submit-journey-tests
+        ref: ${{ inputs.journey-tests-ref }}
 
     - name: Docker Login
       uses: DEFRA/cdp-build-action/docker-login@main
@@ -27,15 +42,18 @@ runs:
       shell: bash
     - name: Start docker compose (the frontend and OWASP ZAP)
       shell: bash
-      run: |
-          WASTE_SUBMIT_REG_PACKAGING_FE=${{inputs.waste-submit-reg-packaging-fe}} \
-          docker compose up --wait --wait-timeout 300 -d --quiet-pull
+      env:
+        WASTE_SUBMIT_REG_PACKAGING_FE: ${{ inputs.waste-submit-reg-packaging-fe }}
+        WASTE_SUBMIT_REG_PACKAGING_FE_B2C_CLIENT_SECRET: ${{ inputs.b2c-client-secret }}
+      run: docker compose up --wait --wait-timeout 300 -d --quiet-pull
     # The whole suite, accessibility included, through ZAP: the run also fails on any High or Medium security alert
     # ZAP finds (test/security).
     - name: Run the tests
       shell: bash
       env:
         ZAP_URL: http://localhost:8080
+        EPR_USER_EMAIL: ${{ inputs.user-email }}
+        EPR_USER_PASSWORD: ${{ inputs.user-password }}
       run: npm test
     - name: Build the Allure report
       if: always()

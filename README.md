@@ -5,6 +5,7 @@ dev, test and perf-test.
 
 - [Setup](#setup)
 - [Running the tests](#running-the-tests)
+  - [Signing in](#signing-in)
   - [Against the local Docker setup](#against-the-local-docker-setup)
   - [Against a CDP environment](#against-a-cdp-environment)
   - [Options](#options)
@@ -37,6 +38,34 @@ Where the tests go is set by environment variables, checked in this order:
 | `FRONTEND_URL`             | that URL                                                                  |
 | `ENVIRONMENT` (e.g. `dev`) | `https://waste-submit-reg-packaging-fe.<ENVIRONMENT>.cdp-int.defra.cloud` |
 | neither                    | `http://localhost:8019`, the local Docker setup                           |
+
+### Signing in
+
+Every page except `/health` and `/cookies` needs sign-in, through Azure AD B2C. Before the tests, the `sign-in` project
+(`test/auth/sign-in.setup.js`) signs a test user in once and saves the browser's cookies in `playwright/.auth/`; each test starts from them, so it's already signed in. Where a test isn't signed in, eg. in the
+cross-browser run, which has no `sign-in` project, the page objects sign in when the frontend sends them to B2C.
+
+The test user's details come from environment variables, the same names as
+[waste-obligations-journey-tests](https://github.com/DEFRA/waste-obligations-journey-tests), so one account and one
+set of secrets can serve both suites:
+
+| Variable                                          | Needed by                                          | What                              |
+| ------------------------------------------------- | -------------------------------------------------- | --------------------------------- |
+| `EPR_USER_EMAIL`                                  | the tests, everywhere                              | the B2C test user's email address |
+| `EPR_USER_PASSWORD`                               | the tests, everywhere                              | the B2C test user's password      |
+| `WASTE_SUBMIT_REG_PACKAGING_FE_B2C_CLIENT_SECRET` | this repo's `compose.yml` (the frontend it starts) | the frontend's B2C client secret  |
+
+Set them in your shell, never in a file in this repository: it's public. Test traces and reports can contain the
+values filled in on B2C's sign-in page, so handle them accordingly.
+
+```bash
+export EPR_USER_EMAIL=… EPR_USER_PASSWORD=…
+```
+
+The frontend in this repo's `compose.yml` signs in with the `AZDCUSPOC2` B2C test tenant, using the frontend's app
+registration there. That registration must allow `http://waste-submit-reg-packaging-fe.localhost:3000/signin-oidc` as a
+redirect URI: it's where B2C sends the browser back to in the security scan setup (see
+[Running it locally](#running-it-locally)).
 
 ### Against the local Docker setup
 
@@ -242,7 +271,7 @@ the evidence and the fix.
 
 - **Active scanning** (ZAP sending attack payloads, such as injection, to the frontend) isn't run: it would change
   data on shared environments and needs agreeing with the environment's owners first.
-- **Pages the journey tests don't reach,** and signed-in pages until the journeys sign in.
+- **Pages the journey tests don't reach.** Alerts for B2C's own sign-in pages are left out with the other hosts'.
 - **Static analysis (SAST) and dependency scanning,** the Test Strategy's other security checks, belong in the
   frontend's own pipeline, not here.
 
@@ -268,6 +297,27 @@ then `ZAP_URL=http://localhost:8080 npm test`. A service repo can run them on it
 `DEFRA/waste-submit-journey-tests/run-journey-tests@main`, passing the image tag it built as
 `waste-submit-reg-packaging-fe`; `waste-submit-reg-packaging-fe` does, so its pull request check fails on a High or
 Medium security alert. The action uploads the Allure report, the ZAP report and the Docker Compose logs as artifacts.
+
+A composite action can't read its caller's secrets, so the caller passes them in as inputs:
+
+```yaml
+- uses: DEFRA/waste-submit-journey-tests/run-journey-tests@main
+  with:
+    waste-submit-reg-packaging-fe: ${{ github.sha }}
+    b2c-client-secret: ${{ secrets.WASTE_SUBMIT_REG_PACKAGING_FE_B2C_CLIENT_SECRET }}
+    user-email: ${{ secrets.EPR_USER_EMAIL }}
+    user-password: ${{ secrets.EPR_USER_PASSWORD }}
+```
+
+The three secrets are needed in each repository that runs the tests: this one, for `journey-tests.yml`, and
+`waste-submit-reg-packaging-fe`. Organisation-level Actions secrets, limited to those repositories, save setting them
+twice. Pull requests from forks don't get secrets, so their journey tests fail at sign-in.
+
+To run a frontend change against changed tests before either merges, give both branches the same name: the frontend's
+pull request check uses this repo's branch of that name when there is one (`journey-tests-ref`), and `main` otherwise.
+
+On CDP, add `EPR_USER_EMAIL` and `EPR_USER_PASSWORD` on the test suite's page in the Portal, Secrets tab. The deployed
+frontends have their own B2C settings, so the tests need nothing else there.
 
 ## Licence
 

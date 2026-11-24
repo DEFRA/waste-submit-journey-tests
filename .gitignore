@@ -18,3 +18,5 @@ playwright-browserstack-sdk.config.temp.json
 log/
 local.log
 zap-report/
+# the signed-in browser's cookies, saved by test/auth/sign-in.setup.js
+playwright/.auth/
