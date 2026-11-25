@@ -1,0 +1,15 @@
+# The HTTPS front door for the frontend in compose.yml, at https://localhost:3000: the only local redirect URI the
+# frontend's B2C app registration allows. Caddy makes its own certificate for localhost (tls internal); the browser
+# and ZAP don't check it. The frontend gets the browser's Host header, so it sends B2C https://localhost:3000/signin-oidc.
+{
+	# Clients that send no SNI (ZAP's Java client doesn't for a name without a dot) get the localhost certificate.
+	default_sni localhost
+	auto_https disable_redirects
+	skip_install_trust
+	admin off
+}
+
+https://localhost:3000 {
+	tls internal
+	reverse_proxy waste-submit-reg-packaging-fe:3000
+}
