@@ -8,20 +8,27 @@ const zapUrl = process.env.ZAP_URL
 
 // On CDP the Portal sets ENVIRONMENT (dev, test, perf-test). Locally the frontend runs in epr-local-environment
 // (submit-data profile) on port 8019; FRONTEND_URL overrides either. Scanning locally, ZAP and the frontend both run in
-// this repo's compose.yml, where the frontend is waste-submit-reg-packaging-fe.localhost:3000 (see the comments there).
+// this repo's compose.yml, where the frontend is https://localhost:3000 (https-proxy; see the comments there).
+const COMPOSE_FRONTEND_URL = 'https://localhost:3000'
 const baseURL =
   process.env.FRONTEND_URL ||
   (process.env.ENVIRONMENT
     ? `https://waste-submit-reg-packaging-fe.${process.env.ENVIRONMENT}.cdp-int.defra.cloud`
     : zapUrl
-      ? 'http://waste-submit-reg-packaging-fe.localhost:3000'
+      ? COMPOSE_FRONTEND_URL
       : 'http://localhost:8019')
 
-// The browser hands every URL to ZAP. ZAP in Docker would take localhost to mean its own container, so the tests
+// The browser hands every URL to ZAP. ZAP in Docker takes localhost to mean its own container's network, which it
+// shares with compose.yml's https-proxy: so localhost:3000 reaches the frontend there, and any other localhost address
 // would fail on every page instead of scanning the frontend.
-if (zapUrl && /^(localhost|127\.|\[::1\])/.test(new URL(baseURL).host)) {
+const { host } = new URL(baseURL)
+if (
+  zapUrl &&
+  /^(localhost|127\.|\[::1\])/.test(host) &&
+  host !== new URL(COMPOSE_FRONTEND_URL).host
+) {
   throw new Error(
-    `ZAP can't reach ${baseURL}: to ZAP, localhost is its own container. Leave FRONTEND_URL unset to scan the frontend in compose.yml.`
+    `ZAP can't reach ${baseURL}: to ZAP, localhost is its own container. Leave FRONTEND_URL unset to scan the frontend in compose.yml (${COMPOSE_FRONTEND_URL}).`
   )
 }
 

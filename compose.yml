@@ -8,8 +8,8 @@
 # Both mongo and localstack have init scripts included for setting up resources
 # on startup. These scripts are in docker/scripts.
 #
-# Playwright runs the browser on the host (or the GitHub runner), not in a container. Its traffic can go through
-# the zap service, for the security scan.
+# Playwright runs the browser on the host (or the GitHub runner), not in a container. It opens the frontend at
+# https://localhost:3000 (https-proxy), and its traffic can go through the zap service, for the security scan.
 #
 # The services being tested can either be started up here using the latest
 # builds from dockerhub.
@@ -71,26 +71,24 @@ services:
     environment:
       - PORT=3000
       - SESSION_CACHE_ENGINE=redis
-      - SESSION_COOKIE_SECURE=false
+      - SESSION_COOKIE_SECURE=true
       - REDIS_TLS=false
       - ENABLE_SECURE_CONTEXT=false
       # Sign-in with the AZDCUSPOC2 B2C test tenant, as waste-obligations-journey-tests does. The client ID is this
-      # frontend's app registration there, which must allow http://waste-submit-reg-packaging-fe.localhost:3000/signin-oidc
-      # as a redirect URI. The secret is a GitHub secret, never committed: this repository is public.
+      # frontend's app registration there, whose only local redirect URI is https://localhost:3000/signin-oidc: hence
+      # https-proxy. The secret is a GitHub secret, never committed: this repository is public.
       - AZURE_AD_B2C_INSTANCE=https://AZDCUSPOC2.b2clogin.com
       - AZURE_AD_B2C_DOMAIN=AZDCUSPOC2.onmicrosoft.com
       - AZURE_AD_B2C_USER_FLOW=B2C_1A_EPR_SignUpSignIn
       - AZURE_AD_B2C_CLIENT_ID=9c23c89a-4410-45df-a77c-aa35634b5a96
       - AZURE_AD_B2C_CLIENT_SECRET=${WASTE_SUBMIT_REG_PACKAGING_FE_B2C_CLIENT_SECRET:?Set WASTE_SUBMIT_REG_PACKAGING_FE_B2C_CLIENT_SECRET to the frontend's B2C client secret (see the README, Signing in)}
-      # Plain HTTP here, so the redirect URI sent to B2C is http and the OAuth state cookie isn't Secure.
-      - AUTH_COOKIE_SECURE=false
+      # The browser reaches the frontend over HTTPS (https-proxy), so the redirect URI sent to B2C is https and the
+      # OAuth state cookie is Secure.
+      - AUTH_COOKIE_SECURE=true
     depends_on:
       redis:
         condition: service_healthy
-    # The name the security scan uses (see zap below). Chromium treats *.localhost as a secure context, so it keeps
-    # the app's Secure cookies (the CSRF crumb, the cookie policy) over plain HTTP, as it does for localhost.
-    ports:
-      - 8019:3000
+    # No published port: everything reaches it through https-proxy, the address B2C sends the browser back to.
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
       interval: 3s
@@ -98,18 +96,39 @@ services:
       retries: 10
 
 ################################################################################
+# The frontend over HTTPS at https://localhost:3000 (docker/https-proxy/Caddyfile): B2C's test tenant accepts no other
+# local address. Only on 127.0.0.1. zap shares this container's network, so zap's port is published here too.
+  https-proxy:
+    image: caddy:2.10-alpine
+    volumes:
+      - ./docker/https-proxy/Caddyfile:/etc/caddy/Caddyfile:ro
+    depends_on:
+      waste-submit-reg-packaging-fe:
+        condition: service_healthy
+    ports:
+      - 127.0.0.1:3000:3000
+      - 127.0.0.1:8080:8080
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "--no-check-certificate", "https://localhost:3000/health"]
+      interval: 3s
+      start_period: 2s
+      retries: 10
+
+################################################################################
 # OWASP ZAP, the proxy the tests' traffic goes through so it can be scanned (npm run test:security). The browser
-# hands each URL to ZAP, which resolves http://waste-submit-reg-packaging-fe.localhost:3000 on this network; to ZAP,
-# localhost:8019 would be its own container. The API has no key, so its port is only published on 127.0.0.1.
+# hands each URL to ZAP, so ZAP has to reach https://localhost:3000 itself: it shares https-proxy's network, where
+# localhost:3000 is the proxy. Its port 8080 is published on https-proxy, only on 127.0.0.1: the API has no key.
   zap:
     image: ghcr.io/zaproxy/zaproxy:2.17.0
+    network_mode: service:https-proxy
+    depends_on:
+      https-proxy:
+        condition: service_healthy
     command: >-
       zap.sh -daemon -silent -host 0.0.0.0 -port 8080
       -config api.disablekey=true
       -config api.addrs.addr.name=.*
       -config api.addrs.addr.regex=true
-    ports:
-      - 127.0.0.1:8080:8080
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:8080/JSON/core/view/version/"]
       interval: 5s
