@@ -89,10 +89,6 @@ services:
         condition: service_healthy
     # The name the security scan uses (see zap below). Chromium treats *.localhost as a secure context, so it keeps
     # the app's Secure cookies (the CSRF crumb, the cookie policy) over plain HTTP, as it does for localhost.
-    networks:
-      default:
-        aliases:
-          - waste-submit-reg-packaging-fe.localhost
     ports:
       - 8019:3000
     healthcheck:
