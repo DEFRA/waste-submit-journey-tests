@@ -9,6 +9,7 @@ dev, test and perf-test.
   - [Against the local Docker setup](#against-the-local-docker-setup)
   - [Against a CDP environment](#against-a-cdp-environment)
   - [Options](#options)
+- [API checks](#api-checks)
 - [Cross-browser (BrowserStack)](#cross-browser-browserstack)
 - [Accessibility](#accessibility)
 - [Security (OWASP ZAP)](#security-owasp-zap)
@@ -129,6 +130,51 @@ docker run --rm --network waste-submit-journey-tests_default \
 
 It ends with "failed to publish test results" locally, because only CDP sets `RESULTS_OUTPUT_S3_PATH`. (Why the
 `.localhost` name: see [Running it locally](#running-it-locally).)
+
+## API checks
+
+`test/api` checks the backend, `waste-submit-reg-packaging-api`, in a deployed environment: does every **published**
+endpoint answer, with the shape its OpenAPI contract promises? It is the `api` Playwright project: no browser, no
+sign-in, and it calls the API directly rather than through ZAP.
+
+What it checks:
+
+- `/health` answers without credentials, and `/describe` without credentials is a 401.
+- An unpublished endpoint is a 404 (CDP environments only: locally they are switched on).
+- Each published endpoint returns 200 and the expected fields.
+
+What doesn't belong here: business rules, validation, error codes, and assertions on specific data. The data differs
+by environment and the visible submission periods by date; the rules are tested in the API's own repository on every
+pull request (see "Testing" in its `CLAUDE.md`). When an endpoint is published, add one check for it here.
+
+The project only runs where there is an API to call:
+
+| Set                        | API checks run against                                                     |
+| -------------------------- | -------------------------------------------------------------------------- |
+| `API_URL`                  | that URL                                                                   |
+| `ENVIRONMENT` (e.g. `dev`) | `https://waste-submit-reg-packaging-api.<ENVIRONMENT>.cdp-int.defra.cloud` |
+| neither                    | they don't run                                                             |
+
+They need an API key client of the API with the `read` scope, in `API_CLIENT_ID` and `API_CLIENT_SECRET` (the same
+names as waste-submit-performance-tests). Without them the run fails, rather than skipping the checks.
+
+On CDP the suite calls as its own client, `JourneyTests`, set up per environment (dev, test and perf-test):
+
+1. In the CDP Portal, on the API's secrets: `Acl__Clients__JourneyTests__Secret`, a new random value. Do this first:
+   the API won't start with a client that has no secret.
+2. In cdp-app-config, for the API: `Acl__Clients__JourneyTests__Type=ApiKey` and
+   `Acl__Clients__JourneyTests__Scopes__0=read`. Redeploy the API so it picks the client up.
+3. In cdp-app-config, for this suite: `API_CLIENT_ID=JourneyTests`. In the CDP Portal, on this suite's secrets:
+   `API_CLIENT_SECRET`, the same value as step 1.
+
+Against an API running locally (`dotnet run`, with its `Developer` client):
+
+```bash
+API_URL=http://localhost:8085 API_CLIENT_ID=Developer API_CLIENT_SECRET=developer-pwd npx playwright test --project=api
+```
+
+The producer material totals check needs the API's upstream, epr-common-data-api, so it fails locally unless one is
+running. `PACKAGING_YEAR` (default 2025) picks the year it asks for.
 
 ## Cross-browser (BrowserStack)
 
@@ -282,6 +328,8 @@ the evidence and the fix.
 - Run it from the Portal: Test Suites, `waste-submit-journey-tests`, choose the environment and press Run. The Portal
   sets `ENVIRONMENT`, so the tests go to `https://waste-submit-reg-packaging-fe.<environment>.cdp-int.defra.cloud`,
   through the platform proxy (`HTTP_PROXY`).
+- The same run includes the [API checks](#api-checks) of `waste-submit-reg-packaging-api` in that environment, so the
+  suite needs its `JourneyTests` client set up there first.
 - After a deployment: the frontend's Portal page, Automations, Test Runs, runs this suite whenever the frontend is
   deployed to the environments chosen there.
 - The default run (no Profile) goes through OWASP ZAP and fails on any High or Medium security alert; see

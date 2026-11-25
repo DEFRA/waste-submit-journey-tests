@@ -1,5 +1,6 @@
 import { defineConfig, devices } from '@playwright/test'
 
+import { apiBaseUrl } from './test/support/api.js'
 import { SIGNED_IN_STATE } from './test/support/sign-in.js'
 
 // When ZAP_URL is set, every request the tests make goes through OWASP ZAP, which scans it for security issues
@@ -50,6 +51,20 @@ const zapProjects = zapUrl
     ]
   : []
 
+// Sanity checks of the backend API (test/api), run where there is an API to call: a CDP environment, or API_URL.
+// No browser and no sign-in. They call the API directly, as other CDP services do, so not through ZAP: the security
+// scan is of the frontend.
+const apiUrl = apiBaseUrl()
+const apiProjects = apiUrl
+  ? [
+      {
+        name: 'api',
+        testDir: './test/api',
+        use: { baseURL: apiUrl, proxy: undefined }
+      }
+    ]
+  : []
+
 export default defineConfig({
   testDir: './test/specs',
   forbidOnly: !!process.env.CI,
@@ -81,6 +96,7 @@ export default defineConfig({
       name: 'chromium',
       use: { ...devices['Desktop Chrome'], storageState: SIGNED_IN_STATE },
       dependencies: ['sign-in']
-    }
+    },
+    ...apiProjects
   ]
 })
