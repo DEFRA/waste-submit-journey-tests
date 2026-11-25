@@ -21,6 +21,6 @@ jobs:
     steps:
       - uses: DEFRA/waste-submit-journey-tests/run-journey-tests@main
         with:
-          WASTE_SUBMIT_REG_PACKAGING_FE_B2C_CLIENT_SECRET: ${{ input.WASTE_SUBMIT_REG_PACKAGING_FE_B2C_CLIENT_SECRET }}
-          EPR_USER_EMAIL: ${{ input.EPR_USER_EMAIL }}
-          EPR_USER_PASSWORD: ${{ input.EPR_USER_PASSWORD }}
+          WASTE_SUBMIT_REG_PACKAGING_FE_B2C_CLIENT_SECRET: ${{ inputs.WASTE_SUBMIT_REG_PACKAGING_FE_B2C_CLIENT_SECRET }}
+          EPR_USER_EMAIL: ${{ inputs.EPR_USER_EMAIL }}
+          EPR_USER_PASSWORD: ${{ inputs.EPR_USER_PASSWORD }}
