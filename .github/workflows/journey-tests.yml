@@ -6,7 +6,20 @@ permissions:
 
 on:
   workflow_dispatch:
+    inputs:
+      profile:
+        description: What to run (the README, Profiles). The API checks can't run on GitHub
+        type: choice
+        options:
+          - frontend
+          - accessibility
+        default: frontend
   workflow_call:
+    inputs:
+      profile:
+        description: What to run, frontend or accessibility (the README, Profiles)
+        type: string
+        default: frontend
     secrets:
       WASTE_SUBMIT_REG_PACKAGING_FE_B2C_CLIENT_SECRET:
         required: true
@@ -19,8 +32,10 @@ jobs:
     name: Run Journey Tests
     runs-on: ubuntu-latest
     steps:
+      # A composite action can't read secrets, so they go in as inputs.
       - uses: DEFRA/waste-submit-journey-tests/run-journey-tests@main
         with:
+          profile: ${{ inputs.profile }}
           b2c-client-secret: ${{ secrets.WASTE_SUBMIT_REG_PACKAGING_FE_B2C_CLIENT_SECRET }}
           user-email: ${{ secrets.EPR_USER_EMAIL }}
           user-password: ${{ secrets.EPR_USER_PASSWORD }}

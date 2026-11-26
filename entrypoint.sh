@@ -45,12 +45,18 @@ stop_zap() {
 # PROFILE is set from the Portal's Run form. compatibility runs the @compat tests on BrowserStack's browsers; the
 # SDK has to wrap the playwright command itself, so it has its own script. accessibility runs only the @accessibility
 # tests (the default run includes them too). The default run goes through ZAP, which fails it on any High or Medium
-# security alert (test/security). That's also the run the Portal starts after each deployment of the frontend.
+# security alert (test/security). frontend is that run without the API checks, for after a deployment of the
+# frontend. api runs only the API checks (test/api), for after a deployment of the API: no browser, so no ZAP.
+# playwright.config.js reads PROFILE itself to choose the tests (test/support/profile.js), and an unknown value
+# fails there.
 if [ "$PROFILE" = "compatibility" ]; then
   npm run test:compatibility
   test_exit_code=$?
 elif [ "$PROFILE" = "accessibility" ]; then
   npm run test:accessibility
+  test_exit_code=$?
+elif [ "$PROFILE" = "api" ]; then
+  npm test
   test_exit_code=$?
 elif start_zap; then
   ZAP_URL=$ZAP_URL_LOCAL npm test

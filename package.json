@@ -16,6 +16,8 @@
     "test": "npm run clean && playwright test",
     "test:local": "npm run clean && playwright test --headed",
     "test:local:debug": "npm run clean && playwright test --debug",
+    "test:frontend": "npm run clean && PROFILE=frontend playwright test",
+    "test:api": "npm run clean && PROFILE=api playwright test",
     "test:accessibility": "npm run clean && playwright test --grep @accessibility",
     "test:security": "npm run clean && ZAP_URL=${ZAP_URL:-http://localhost:8080} playwright test --grep-invert @accessibility",
     "test:unit": "node --test 'test/unit/**/*.test.js'",

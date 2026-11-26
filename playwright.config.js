@@ -1,10 +1,21 @@
 import { defineConfig, devices } from '@playwright/test'
 
+import { apiBaseUrl } from './test/support/api.js'
+import {
+  runsApi,
+  runsFrontend,
+  selectedProfile
+} from './test/support/profile.js'
 import { SIGNED_IN_STATE } from './test/support/sign-in.js'
 
+// PROFILE chooses what runs: everything, the frontend journeys only, or the API checks only (test/support/profile.js).
+const profile = selectedProfile()
+const frontend = runsFrontend(profile)
+
 // When ZAP_URL is set, every request the tests make goes through OWASP ZAP, which scans it for security issues
-// (test/support/zap.js). entrypoint.sh sets it on CDP and the run-journey-tests action on GitHub.
-const zapUrl = process.env.ZAP_URL
+// (test/support/zap.js). entrypoint.sh sets it on CDP and the run-journey-tests action on GitHub. The scan is of the
+// frontend, so a run without the frontend journeys doesn't use it.
+const zapUrl = frontend ? process.env.ZAP_URL : undefined
 
 // On CDP the Portal sets ENVIRONMENT (dev, test, perf-test). Locally the frontend runs in epr-local-environment
 // (submit-data profile) on port 8019; FRONTEND_URL overrides either. Scanning locally, ZAP and the frontend both run in
@@ -57,6 +68,48 @@ const zapProjects = zapUrl
     ]
   : []
 
+// Sanity checks of the backend API (test/api), run where there is an API to call: a CDP environment, or API_URL.
+// No browser and no sign-in. They call the API directly, as other CDP services do, so not through ZAP: the security
+// scan is of the frontend.
+const apiUrl = runsApi(profile) ? apiBaseUrl() : undefined
+
+// A run asked for the API checks alone must not pass with none.
+if (profile === 'api' && !apiUrl) {
+  throw new Error(
+    'PROFILE=api needs an API to call: set ENVIRONMENT (a CDP environment) or API_URL'
+  )
+}
+
+const apiProjects = apiUrl
+  ? [
+      {
+        name: 'api',
+        testDir: './test/api',
+        use: { baseURL: apiUrl, proxy: undefined }
+      }
+    ]
+  : []
+
+// sign-in signs the test user in through Azure AD B2C once and saves the browser's cookies; the journey tests start
+// from them (test/auth/sign-in.setup.js). With ZAP, sign-in runs after zap-setup, so the new ZAP session sees it.
+const frontendProjects = frontend
+  ? [
+      ...zapProjects,
+      {
+        name: 'sign-in',
+        testDir: './test/auth',
+        testMatch: 'sign-in.setup.js',
+        use: { ...devices['Desktop Chrome'] },
+        dependencies: zapUrl ? ['zap-setup'] : []
+      },
+      {
+        name: 'chromium',
+        use: { ...devices['Desktop Chrome'], storageState: SIGNED_IN_STATE },
+        dependencies: ['sign-in']
+      }
+    ]
+  : []
+
 export default defineConfig({
   testDir: './test/specs',
   forbidOnly: !!process.env.CI,
@@ -72,22 +125,5 @@ export default defineConfig({
   },
   // The device settings live on the project, not the top-level `use`: the BrowserStack run
   // (playwright.compatibility.config.js) keeps `use` but replaces the projects with its real browsers.
-  //
-  // sign-in signs the test user in through Azure AD B2C once and saves the browser's cookies; the journey tests start
-  // from them (test/auth/sign-in.setup.js). With ZAP, sign-in runs after zap-setup, so the new ZAP session sees it.
-  projects: [
-    ...zapProjects,
-    {
-      name: 'sign-in',
-      testDir: './test/auth',
-      testMatch: 'sign-in.setup.js',
-      use: { ...devices['Desktop Chrome'] },
-      dependencies: zapUrl ? ['zap-setup'] : []
-    },
-    {
-      name: 'chromium',
-      use: { ...devices['Desktop Chrome'], storageState: SIGNED_IN_STATE },
-      dependencies: ['sign-in']
-    }
-  ]
+  projects: [...frontendProjects, ...apiProjects]
 })

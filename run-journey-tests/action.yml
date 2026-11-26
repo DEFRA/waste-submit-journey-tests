@@ -5,6 +5,10 @@ inputs:
     description: Image tag of waste-submit-reg-packaging-fe to test (default latest)
     required: false
     type: string
+  profile:
+    description: What to run, as the CDP Portal's Profile does (the README, Profiles). frontend (the default) is the frontend journeys through ZAP; accessibility is the @accessibility tests only. The API checks need a deployed API, which GitHub can't reach, so api isn't available here.
+    required: false
+    default: frontend
   journey-tests-ref:
     description: Branch or SHA of these tests to run (default main). A caller passes its own branch's name when this repo has a matching branch, so a frontend change and its test changes run together before either merges.
     required: false
@@ -23,6 +27,17 @@ inputs:
 runs:
   using: "composite"
   steps:
+    # Before anything is started: only the frontend is in compose.yml, and BrowserStack isn't set up here.
+    - name: Check the profile
+      shell: bash
+      env:
+        PROFILE: ${{ inputs.profile }}
+      run: |
+        case "$PROFILE" in
+          frontend|accessibility) ;;
+          api) echo "::error::The api profile needs a deployed API, which GitHub can't reach. Run it from the CDP Portal with Profile api."; exit 1 ;;
+          *) echo "::error::Unknown profile '$PROFILE'. Use frontend or accessibility."; exit 1 ;;
+        esac
     - uses: actions/checkout@v4
       with:
         repository: DEFRA/waste-submit-journey-tests
@@ -46,15 +61,21 @@ runs:
         WASTE_SUBMIT_REG_PACKAGING_FE: ${{ inputs.waste-submit-reg-packaging-fe }}
         WASTE_SUBMIT_REG_PACKAGING_FE_B2C_CLIENT_SECRET: ${{ inputs.b2c-client-secret }}
       run: docker compose up --wait --wait-timeout 300 -d --quiet-pull
-    # The whole suite, accessibility included, through ZAP: the run also fails on any High or Medium security alert
-    # ZAP finds (test/security).
+    # frontend: every frontend test, accessibility included, through ZAP, so the run also fails on any High or Medium
+    # security alert ZAP finds (test/security). accessibility: the @accessibility tests only, not through ZAP, as on
+    # CDP (entrypoint.sh).
     - name: Run the tests
       shell: bash
       env:
-        ZAP_URL: http://localhost:8080
+        PROFILE: ${{ inputs.profile }}
         EPR_USER_EMAIL: ${{ inputs.user-email }}
         EPR_USER_PASSWORD: ${{ inputs.user-password }}
-      run: npm test
+      run: |
+        if [ "$PROFILE" = "accessibility" ]; then
+          npm run test:accessibility
+        else
+          ZAP_URL=http://localhost:8080 npm test
+        fi
     - name: Build the Allure report
       if: always()
       shell: bash
