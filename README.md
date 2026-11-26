@@ -65,9 +65,9 @@ export EPR_USER_EMAIL=… EPR_USER_PASSWORD=…
 ```
 
 The frontend in this repo's `compose.yml` signs in with the `AZDCUSPOC2` B2C test tenant, using the frontend's app
-registration there. That registration must allow `http://waste-submit-reg-packaging-fe.localhost:3000/signin-oidc` as a
-redirect URI: it's where B2C sends the browser back to in the security scan setup (see
-[Running it locally](#running-it-locally)).
+registration there. The only local redirect URI that registration allows is `https://localhost:3000/signin-oidc`, so
+`compose.yml` serves the frontend there, over HTTPS (see [Running it locally](#running-it-locally)). B2C rejects any
+other local address with `AADB2C90006` (`redirect_uri_mismatch`) and sends the browser to that one instead.
 
 ### Against the local Docker setup
 
@@ -124,13 +124,15 @@ To run the Docker image the way CDP does, security scan included, against the fr
 
 ```bash
 docker build --platform linux/amd64 -t waste-submit-journey-tests .
-docker compose up -d --wait
-docker run --rm --network waste-submit-journey-tests_default \
-  -e FRONTEND_URL=http://waste-submit-reg-packaging-fe.localhost:3000 waste-submit-journey-tests
+docker compose up -d --wait https-proxy
+docker run --rm --network container:waste-submit-journey-tests-https-proxy-1 \
+  -e FRONTEND_URL=https://localhost:3000 -e EPR_USER_EMAIL -e EPR_USER_PASSWORD waste-submit-journey-tests
 ```
 
-It ends with "failed to publish test results" locally, because only CDP sets `RESULTS_OUTPUT_S3_PATH`. (Why the
-`.localhost` name: see [Running it locally](#running-it-locally).)
+The image starts its own ZAP, so this starts the frontend and its HTTPS proxy without `compose.yml`'s `zap`, and runs
+the tests in the proxy's network, where `https://localhost:3000` is the frontend (see
+[Running it locally](#running-it-locally)). It ends with "failed to publish test results" locally, because only CDP
+sets `RESULTS_OUTPUT_S3_PATH`.
 
 ## Profiles
 
@@ -310,23 +312,29 @@ The `api`, `accessibility` and `compatibility` profiles don't go through ZAP.
 
 ### Running it locally
 
-ZAP runs in Docker, from this repo's `compose.yml`, along with the frontend and what it needs. Stop epr-local-environment's
-frontend first if it's running: both use port 8019.
+ZAP runs in Docker, from this repo's `compose.yml`, along with the frontend and what it needs. The frontend is at
+`https://localhost:3000`, so stop anything else on port 3000 first: epr-local-environment's `waste-packaging-regulators-fe`
+(regulator profile), or the frontend's own `npm run dev`.
 
 ```bash
-docker compose up -d --wait   # the frontend, ZAP, Redis, MongoDB, LocalStack
+docker compose up -d --wait   # the frontend and its HTTPS proxy, ZAP, Redis, MongoDB, LocalStack
 npm run test:security         # the journey tests (not @accessibility) through ZAP, then the alert check
 docker compose down           # when you're done
 ```
 
 `npm run test:security` leaves out the `@accessibility` tests. It sets `ZAP_URL=http://localhost:8080` and, unless you
-set `FRONTEND_URL`, goes to
-`http://waste-submit-reg-packaging-fe.localhost:3000`. That name is two workarounds in one:
+set `FRONTEND_URL`, goes to `https://localhost:3000`. That address takes three pieces in `compose.yml`:
 
-- The browser hands every URL to ZAP. To ZAP, in its own container, `localhost:8019` would be itself, so it needs
-  the frontend's name on the Docker network (an alias in `compose.yml`).
-- The frontend's image runs in production mode, so its CSRF and cookie-policy cookies are `Secure`. Over plain HTTP,
-  Chromium only keeps `Secure` cookies for `localhost` and `*.localhost`; on any other name the cookie forms fail.
+- **Sign-in.** It's the only local redirect URI B2C allows for the frontend (see [Signing in](#signing-in)), and it's
+  `https`. The frontend only serves `http`, so `https-proxy` (Caddy, `docker/https-proxy/Caddyfile`) serves it over
+  HTTPS with its own certificate, which the browser and ZAP don't check. The frontend has `AUTH_COOKIE_SECURE=true`,
+  so it tells B2C to send the browser back to `https://`, and its cookies are `Secure`, as on CDP.
+- **ZAP.** The browser hands every URL to ZAP, and to ZAP in its own container `localhost` would be itself. So `zap`
+  shares `https-proxy`'s network (`network_mode`), where `localhost:3000` is the proxy. That's why ZAP's port is
+  published on `https-proxy`.
+- **No other port.** The frontend itself isn't published: sign-in only works through `https://localhost:3000`.
+
+Without ZAP, run the same tests against it with `FRONTEND_URL=https://localhost:3000 npm test`.
 
 Open `zap-report/zap-report.html` for the detail of each alert. Leaving ZAP running is fine: each run starts a new
 session.

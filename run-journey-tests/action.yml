@@ -55,7 +55,7 @@ runs:
         npm ci
         npx playwright install --with-deps chromium
       shell: bash
-    - name: Start docker compose (the frontend and OWASP ZAP)
+    - name: Start docker compose (the frontend, its HTTPS proxy and OWASP ZAP)
       shell: bash
       env:
         WASTE_SUBMIT_REG_PACKAGING_FE: ${{ inputs.waste-submit-reg-packaging-fe }}
@@ -80,8 +80,12 @@ runs:
       if: always()
       shell: bash
       run: npm run report
+    # docker compose reads all of compose.yml for every command, logs included, so it needs the same variables as up.
     - name: debug
       if: always()
+      env:
+        WASTE_SUBMIT_REG_PACKAGING_FE: ${{ inputs.waste-submit-reg-packaging-fe }}
+        WASTE_SUBMIT_REG_PACKAGING_FE_B2C_CLIENT_SECRET: ${{ inputs.b2c-client-secret }}
       run: |
         docker compose logs > logs.txt
         docker ps
