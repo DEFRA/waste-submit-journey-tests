@@ -9,6 +9,7 @@ dev, test and perf-test.
   - [Against the local Docker setup](#against-the-local-docker-setup)
   - [Against a CDP environment](#against-a-cdp-environment)
   - [Options](#options)
+- [Profiles](#profiles)
 - [API checks](#api-checks)
 - [Cross-browser (BrowserStack)](#cross-browser-browserstack)
 - [Accessibility](#accessibility)
@@ -131,6 +132,33 @@ docker run --rm --network waste-submit-journey-tests_default \
 It ends with "failed to publish test results" locally, because only CDP sets `RESULTS_OUTPUT_S3_PATH`. (Why the
 `.localhost` name: see [Running it locally](#running-it-locally).)
 
+## Profiles
+
+The suite holds two kinds of test: the frontend journeys (browser, sign-in, security scan) and the
+[API checks](#api-checks). The `PROFILE` environment variable chooses what a run does:
+
+| `PROFILE`       | Runs                                                                                  |
+| --------------- | ------------------------------------------------------------------------------------- |
+| not set         | Everything: the frontend journeys, and the API checks where there is an API to call   |
+| `frontend`      | The frontend journeys only, through OWASP ZAP where there is one                      |
+| `api`           | The API checks only: no browser, no sign-in, no ZAP. Fails if there is no API to call |
+| `accessibility` | The `@accessibility` tests only ([Accessibility](#accessibility))                     |
+| `compatibility` | The `@compat` tests on BrowserStack ([Cross-browser](#cross-browser-browserstack))    |
+
+Any other value fails the run, so a typo can't quietly run everything.
+
+Who sets it:
+
+| Run                                                    | Profile    | Set by                                                |
+| ------------------------------------------------------ | ---------- | ----------------------------------------------------- |
+| Pull request on `waste-submit-reg-packaging-fe`        | `frontend` | The `profile` input of the `run-journey-tests` action |
+| After a deployment of `waste-submit-reg-packaging-fe`  | `frontend` | The Profile field of the test run in the CDP Portal   |
+| After a deployment of `waste-submit-reg-packaging-api` | `api`      | The Profile field of the test run in the CDP Portal   |
+| By hand, from the Portal or your machine               | any        | The Portal's Profile field, or `PROFILE=api npm test` |
+
+`npm run test:frontend` and `npm run test:api` set it for you. `playwright.config.js` reads it
+(`test/support/profile.js`) to choose the Playwright projects; `entrypoint.sh` reads it to decide whether to start ZAP.
+
 ## API checks
 
 `test/api` checks the backend, `waste-submit-reg-packaging-api`, in a deployed environment: does every **published**
@@ -147,7 +175,8 @@ What doesn't belong here: business rules, validation, error codes, and assertion
 by environment and the visible submission periods by date; the rules are tested in the API's own repository on every
 pull request (see "Testing" in its `CLAUDE.md`). When an endpoint is published, add one check for it here.
 
-The project only runs where there is an API to call:
+The project runs with no profile or with the `api` profile ([Profiles](#profiles)), and only where there is an API to
+call:
 
 | Set                        | API checks run against                                                     |
 | -------------------------- | -------------------------------------------------------------------------- |
@@ -170,7 +199,7 @@ On CDP the suite calls as its own client, `JourneyTests`, set up per environment
 Against an API running locally (`dotnet run`, with its `Developer` client):
 
 ```bash
-API_URL=http://localhost:8085 API_CLIENT_ID=Developer API_CLIENT_SECRET=developer-pwd npx playwright test --project=api
+PROFILE=api API_URL=http://localhost:8085 API_CLIENT_ID=Developer API_CLIENT_SECRET=developer-pwd npm test
 ```
 
 The producer material totals check needs the API's upstream, epr-common-data-api, so it fails locally unless one is
@@ -271,13 +300,13 @@ ZAP never scans it.
 
 ### When it runs
 
-| Where                                                                                                          | How                                                                                                                                                                                                                                       |
-| -------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Every pull request on `waste-submit-reg-packaging-fe`, before it merges                                        | The `run-journey-tests` action runs the whole suite, accessibility included, through ZAP (`ZAP_URL` set, `npm test`) against the PR's image, with ZAP from `compose.yml`. The ZAP report is the `zap-report` artifact on the workflow run |
-| The CDP Portal's default run (no Profile): run by hand, or automatically after each deployment of the frontend | `entrypoint.sh` starts the ZAP bundled in the image (pinned in the `Dockerfile`) and chains it to the platform proxy, then runs `npm test` through it. The ZAP report is attached to the Allure report                                    |
-| Your machine                                                                                                   | `npm run test:security` ([below](#running-it-locally))                                                                                                                                                                                    |
+| Where                                                                                                                                     | How                                                                                                                                                                                                                                              |
+| ----------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Every pull request on `waste-submit-reg-packaging-fe`, before it merges                                                                   | The `run-journey-tests` action runs the `frontend` profile, accessibility included, through ZAP (`ZAP_URL` set, `npm test`) against the PR's image, with ZAP from `compose.yml`. The ZAP report is the `zap-report` artifact on the workflow run |
+| The CDP Portal's default run (no Profile) and its `frontend` profile: run by hand, or automatically after each deployment of the frontend | `entrypoint.sh` starts the ZAP bundled in the image (pinned in the `Dockerfile`) and chains it to the platform proxy, then runs `npm test` through it. The ZAP report is attached to the Allure report                                           |
+| Your machine                                                                                                                              | `npm run test:security` ([below](#running-it-locally))                                                                                                                                                                                           |
 
-The `accessibility` and `compatibility` profiles don't go through ZAP.
+The `api`, `accessibility` and `compatibility` profiles don't go through ZAP.
 
 ### Running it locally
 
@@ -328,10 +357,12 @@ the evidence and the fix.
 - Run it from the Portal: Test Suites, `waste-submit-journey-tests`, choose the environment and press Run. The Portal
   sets `ENVIRONMENT`, so the tests go to `https://waste-submit-reg-packaging-fe.<environment>.cdp-int.defra.cloud`,
   through the platform proxy (`HTTP_PROXY`).
-- The same run includes the [API checks](#api-checks) of `waste-submit-reg-packaging-api` in that environment, so the
-  suite needs its `JourneyTests` client set up there first.
-- After a deployment: the frontend's Portal page, Automations, Test Runs, runs this suite whenever the frontend is
-  deployed to the environments chosen there.
+- With no Profile the run includes the [API checks](#api-checks) of `waste-submit-reg-packaging-api` in that
+  environment, so the suite needs its `JourneyTests` client set up there first. Set Profile to `frontend` or `api` to
+  run one without the other ([Profiles](#profiles)).
+- After a deployment: a service's Portal page, Automations, Test Runs, runs this suite whenever that service is
+  deployed to the environments chosen there. Set it up twice: on the frontend's page with Profile `frontend`, and on
+  the API's page with Profile `api`, so a deployment of the API runs the API checks and nothing else.
 - The default run (no Profile) goes through OWASP ZAP and fails on any High or Medium security alert; see
   [Security (OWASP ZAP)](#security-owasp-zap). If ZAP doesn't start, the tests still run but the run fails.
 - Pass or fail is the container's exit code (`entrypoint.sh`); the Allure report is uploaded to the Portal by
@@ -340,8 +371,10 @@ the evidence and the fix.
 ## On GitHub
 
 GitHub can't reach CDP environments, so `.github/workflows/journey-tests.yml` runs the tests against the frontend's
-Docker Hub image started from `compose.yml`, the whole suite through OWASP ZAP. Locally: `docker compose up -d --wait`
-then `ZAP_URL=http://localhost:8080 npm test`. A service repo can run them on its pull requests with
+Docker Hub image started from `compose.yml`, the `frontend` profile through OWASP ZAP. Only the frontend is in
+`compose.yml`, so the API checks can't run on GitHub: the action takes a `profile` input of `frontend` (the default)
+or `accessibility`, and refuses `api`. Locally: `docker compose up -d --wait` then
+`ZAP_URL=http://localhost:8080 npm run test:frontend`. A service repo can run them on its pull requests with
 `DEFRA/waste-submit-journey-tests/run-journey-tests@main`, passing the image tag it built as
 `waste-submit-reg-packaging-fe`; `waste-submit-reg-packaging-fe` does, so its pull request check fails on a High or
 Medium security alert. The action uploads the Allure report, the ZAP report and the Docker Compose logs as artifacts.
@@ -352,6 +385,7 @@ A composite action can't read its caller's secrets, so the caller passes them in
 - uses: DEFRA/waste-submit-journey-tests/run-journey-tests@main
   with:
     waste-submit-reg-packaging-fe: ${{ github.sha }}
+    profile: frontend
     b2c-client-secret: ${{ secrets.WASTE_SUBMIT_REG_PACKAGING_FE_B2C_CLIENT_SECRET }}
     user-email: ${{ secrets.EPR_USER_EMAIL }}
     user-password: ${{ secrets.EPR_USER_PASSWORD }}
